@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="fd86b9a0-88d4-49c9-aac5-b025bc34a652" name="ResNet_CUB">
+        <fileTransfer accessType="SFTP" host="172.21.78.232" port="22" sshConfigId="b7465d70-4671-4cc2-bd5e-c76c41205b5c" sshConfig="ResNet_CUB">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

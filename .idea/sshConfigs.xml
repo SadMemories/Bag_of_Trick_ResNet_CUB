@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="SshConfigs">
+    <configs>
+      <sshConfig authType="PASSWORD" host="172.21.78.232" id="b7465d70-4671-4cc2-bd5e-c76c41205b5c" port="22" customName="ResNet_CUB" nameFormat="CUSTOM" username="wwj" />
+    </configs>
+  </component>
+</project>
