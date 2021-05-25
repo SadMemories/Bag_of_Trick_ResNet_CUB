@@ -150,7 +150,8 @@ def train(args):
     if args.pretrain:
         net_state_dict = model.state_dict()
         state_dict = load_url(model_urls[model_str], progress=True)
-        pretrain_dict = {k: v for k, v in state_dict.items() if model.state_dict()[k].numel() == v.numel()}
+        pretrain_dict = {k: v for k, v in state_dict.items() if k in net_state_dict
+                         and model.state_dict()[k].numel() == v.numel()}
         net_state_dict.update(pretrain_dict)
         model.load_state_dict(net_state_dict)
 
