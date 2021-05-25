@@ -13,6 +13,7 @@ from torchvision import transforms
 from dataset import CUB_dataset
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from torch.utils.model_zoo import load_url
 
 
 model_urls = {
@@ -128,12 +129,30 @@ def train(args):
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=nw)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=nw)
 
-    model = get_resnet(50, num_classes)
+    depth = 50
+    model_str = ''
+    if depth == 18:
+        model_str = 'resnet18'
+    elif depth == 34:
+        model_str = 'resnet34'
+    elif depth == 50:
+        model_str = 'resnet50'
+    elif depth == 101:
+        model_str = 'resnet101'
+
+    model = get_resnet(depth, num_classes)
     # model = resnet50(num_classes)
 
     # model = resnet50(pretrained=False)
     # infeature = model.fc.in_features
     # model.fc = nn.Linear(infeature, num_classes)
+
+    if args.pretrain:
+        net_state_dict = model.state_dict()
+        state_dict = load_url(model_urls[model_str], progress=True)
+        pretrain_dict = {k: v for k, v in state_dict.items() if model.state_dict()[k].numel() == v.numel()}
+        net_state_dict.update(pretrain_dict)
+        model.load_state_dict(net_state_dict)
 
     if torch.cuda.device_count() > 1:
         print("Let's use {} GPUS".format(torch.cuda.device_count()))
@@ -143,9 +162,13 @@ def train(args):
 
     lr = 0.01
     weight_decay = 1e-4
+    if args.pretrain:
+        milestones = [30, 60, 90]
+    else:
+        milestones = [250, 350, 400]
 
     optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=weight_decay)
-    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[250, 350, 400], gamma=0.1)
+    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.1)
 
     criterion = nn.CrossEntropyLoss()
 
@@ -155,6 +178,7 @@ def train(args):
     test_acc_his = []
 
     best_acc = 0.0
+    best_model_pth = './Model_Pth/resnet50_pretrain.pth'
 
     for epoch in range(args.epochs):
 
@@ -203,10 +227,16 @@ def train(args):
             predict = torch.max(out, dim=1)[1]
             test_acc += predict.eq(labels).sum()
 
-        test_loss_his.append(test_epoch_loss / len(test_loader))
-        test_acc_his.append(test_acc / len(test_dataset))
-        writer.add_scalar('test/test loss', test_epoch_loss / len(test_loader), epoch+1)
-        writer.add_scalar('test/test accuracy', test_acc / len(test_dataset), epoch+1)
+        test_acc_per = test_acc / len(test_dataset)
+        test_loss_per = test_epoch_loss / len(test_loader)
+        test_loss_his.append(test_loss_per)
+        test_acc_his.append(test_acc_per)
+        writer.add_scalar('test/test loss', test_loss_per, epoch+1)
+        writer.add_scalar('test/test accuracy', test_acc_per, epoch+1)
+
+        if test_acc_per > best_acc:
+            best_acc = test_acc_per
+            torch.save(model.state_dict(), best_model_pth)
 
         print('epoch[{}/{}]\ttrain loss: {:.4f}\ttrain acc: {:.4f}\ttest loss: {:.4f}\ttest acc: {:.4f}'
               .format(epoch + 1, args.epochs, train_epoch_loss / len(train_loader), train_acc / len(train_dataset),
@@ -222,6 +252,7 @@ if __name__ == '__main__':
                         help='the root path of CUB dataset')
     parser.add_argument('--image-size', type=int, default=224, help='the size of input image')
     parser.add_argument('--device', type=str, default='0', help='ie: 0 or 1 or 0,1 or cpu')
+    parser.add_argument('--pretrain', action='store_true', help='using the pretrained weight')
 
     args = parser.parse_args()
 
