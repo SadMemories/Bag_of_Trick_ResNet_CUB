@@ -1,6 +1,7 @@
 import torch.nn as nn
 from torch.nn import init
 import torch
+from torch.utils.tensorboard import SummaryWriter
 
 
 class BasicBlock(nn.Module):
@@ -108,19 +109,19 @@ class ResNet(nn.Module):
 
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
-            if stride == 2:
-                downsample = nn.Sequential(
-                    nn.AvgPool2d(kernel_size=2, stride=2),
-                    nn.Conv2d(self.inplanes, planes * block.expansion,
-                              kernel_size=1, stride=1, bias=False),
-                    nn.BatchNorm2d(planes * block.expansion)
-                )
-            else:
-                downsample = nn.Sequential(
-                    nn.Conv2d(self.inplanes, planes * block.expansion,
-                              kernel_size=1, stride=stride, bias=False),
-                    nn.BatchNorm2d(planes * block.expansion)
-                )
+            # if stride == 2:
+            #     downsample = nn.Sequential(
+            #         nn.AvgPool2d(kernel_size=2, stride=2),
+            #         nn.Conv2d(self.inplanes, planes * block.expansion,
+            #                   kernel_size=1, stride=1, bias=False),
+            #         nn.BatchNorm2d(planes * block.expansion)
+            #     )
+            # else:
+            downsample = nn.Sequential(
+                nn.Conv2d(self.inplanes, planes * block.expansion,
+                          kernel_size=1, stride=stride, bias=False),
+                nn.BatchNorm2d(planes * block.expansion)
+            )
 
         layers = [block(self.inplanes, planes, stride, downsample)]
 
@@ -159,3 +160,11 @@ def get_resnet(depth, num_classes):
         return ResNet(BottleBlock, [3, 4, 6, 3], num_classes)
     else:
         return ResNet(BottleBlock, [3, 4, 23, 3], num_classes)
+
+
+# if __name__ == '__main__':
+#     writer = SummaryWriter()
+#     model = get_resnet(50, 200)
+#     input = torch.zeros([32, 3, 224, 224])
+#     writer.add_graph(model, input)
+#     writer.close()

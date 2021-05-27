@@ -1,10 +1,12 @@
 import os
+import math
 import torch
 import random
 import numpy as np
 import argparse
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.functional as F
 from tqdm import tqdm
 from model import get_resnet
 # from model1 import resnet50
@@ -14,7 +16,6 @@ from dataset import CUB_dataset
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.model_zoo import load_url
-
 
 model_urls = {
     'resnet18': 'https://download.pytorch.org/models/resnet18-f37072fd.pth',
@@ -45,6 +46,22 @@ def select_device(device):
     cuda = False if cpu_request else torch.cuda.is_available()
     return torch.device('cuda:0' if cuda else 'cpu')
 
+class LabelSmoothCELoss(nn.Module):
+
+    def __init__(self):
+        super(LabelSmoothCELoss, self).__init__()
+
+    def forward(self, pred, label, smoothing=0.1):
+        pred = F.softmax(pred, dim=1)
+        one_hot_label = F.one_hot(label, pred.size(1)).float()
+        smoothing_label = (1 - smoothing) * one_hot_label + smoothing / pred.size(1)
+
+        loss = (-torch.log(pred) * smoothing_label)
+        loss = loss.sum(dim=1, keepdim=False)
+        loss = loss.mean()
+
+        return loss
+
 
 def train(args):
     root_path = args.root_path
@@ -58,7 +75,7 @@ def train(args):
     classes_txt_path = os.path.join(root_path, 'classes.txt')
     assert os.path.exists(train_test_path), '{} train_test_split.txt path is not exists...'.format(train_test_path)
     assert os.path.exists(images_txt_path), '{} image path is not exists...'.format(images_txt_path)
-    assert os.path.exists(images_labels_path), '{} image_class_labels.txt path is not exists...'\
+    assert os.path.exists(images_labels_path), '{} image_class_labels.txt path is not exists...' \
         .format(images_labels_path)
     assert os.path.exists(classes_txt_path), '{} classes.txt path is not exists...'.format(classes_txt_path)
 
@@ -108,16 +125,20 @@ def train(args):
             transforms.ToPILImage(),
             transforms.RandomResizedCrop((args.image_size, args.image_size)),
             transforms.RandomHorizontalFlip(),
+            # transforms.ColorJitter(brightness=0.4, saturation=0.4, hue=0.4),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.43237721533416357, 0.49941621333172476, 0.4856074889829789],
-                                 std=[0.2665100547329813, 0.22770540015765814, 0.2321024260764962])
+            # transforms.Normalize(mean=[0.43237721533416357, 0.49941621333172476, 0.4856074889829789],
+            #                      std=[0.2665100547329813, 0.22770540015765814, 0.2321024260764962])
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ]),
         'val': transforms.Compose([
             transforms.ToPILImage(),
-            transforms.Resize((args.image_size, args.image_size)),
+            # transforms.Resize((args.image_size, args.image_size)),
+            transforms.CenterCrop(args.image_size),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.43237713785804116, 0.49941626449353244, 0.48560741861744905],
-                                 std=[0.2665100547329813, 0.22770540015765814, 0.2321024260764962])
+            # transforms.Normalize(mean=[0.43237713785804116, 0.49941626449353244, 0.48560741861744905],
+            #                      std=[0.2665100547329813, 0.22770540015765814, 0.2321024260764962])
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
     }
 
@@ -168,10 +189,33 @@ def train(args):
     else:
         milestones = [250, 350, 400]
 
-    optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=weight_decay)
-    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.1)
+    use_nag = False
+    if args.NAG:
+        use_nag = True
+    optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=weight_decay, nesterov=use_nag)
 
-    criterion = nn.CrossEntropyLoss()
+    warm_up_epoch = args.warm_up
+    if args.cosine:
+        # warm up with cosine learning rate
+        if warm_up_epoch:
+            warm_up_with_cosine = lambda epoch: epoch / warm_up_epoch if epoch <= warm_up_epoch else \
+                0.5 * (math.cos((epoch - warm_up_epoch) / (args.epochs - warm_up_epoch) * math.pi) + 1)
+            scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warm_up_with_cosine)
+        else:
+            scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=0)
+    else:
+        # warm up with multi step
+        if warm_up_epoch:
+            warm_up_with_step = lambda epoch: epoch / warm_up_epoch if epoch <= warm_up_epoch else 0.1 ** len(
+                [m for m in milestones if m <= epoch])
+            scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=warm_up_with_step)
+        else:
+            scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=0.1)
+
+    if args.label_smooth:
+        criterion = LabelSmoothCELoss()
+    else:
+        criterion = nn.CrossEntropyLoss()
 
     train_loss_his = []
     train_acc_his = []
@@ -207,8 +251,8 @@ def train(args):
         scheduler.step()
         train_loss_his.append(train_epoch_loss / len(train_loader))
         train_acc_his.append(train_acc / len(train_dataset))
-        writer.add_scalar('train/train loss', train_epoch_loss / len(train_loader), epoch+1)
-        writer.add_scalar('train/train accuracy', train_acc / len(train_dataset), epoch+1)
+        writer.add_scalar('train/train loss', train_epoch_loss / len(train_loader), epoch + 1)
+        writer.add_scalar('train/train accuracy', train_acc / len(train_dataset), epoch + 1)
 
         test_bar = tqdm(test_loader)
         test_epoch_loss = 0.0
@@ -232,8 +276,8 @@ def train(args):
         test_loss_per = test_epoch_loss / len(test_loader)
         test_loss_his.append(test_loss_per)
         test_acc_his.append(test_acc_per)
-        writer.add_scalar('test/test loss', test_loss_per, epoch+1)
-        writer.add_scalar('test/test accuracy', test_acc_per, epoch+1)
+        writer.add_scalar('test/test loss', test_loss_per, epoch + 1)
+        writer.add_scalar('test/test accuracy', test_acc_per, epoch + 1)
 
         if test_acc_per > best_acc:
             best_acc = test_acc_per
@@ -245,7 +289,6 @@ def train(args):
 
 
 if __name__ == '__main__':
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--batch-size', type=int, default=32, help='the size of batch')
     parser.add_argument('--epochs', type=int, default=100, help='the num of epoch')
@@ -254,10 +297,12 @@ if __name__ == '__main__':
     parser.add_argument('--image-size', type=int, default=224, help='the size of input image')
     parser.add_argument('--device', type=str, default='0', help='ie: 0 or 1 or 0,1 or cpu')
     parser.add_argument('--pretrain', action='store_true', help='using the pretrained weight')
+    parser.add_argument('--NAG', action='store_true', help='using the NAG optimizer')
+    parser.add_argument('--warm-up', type=int, default=0, help='warm up epoch')
+    parser.add_argument('--cosine', action='store_true', help='using cosine learning rate adjust')
+    parser.add_argument('--label-smooth', action='store_true', help='using label smooth loss')
 
     args = parser.parse_args()
 
     set_seed(0)
     train(args)
-
-
