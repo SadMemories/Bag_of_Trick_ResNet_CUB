@@ -163,8 +163,9 @@ def get_resnet(depth, num_classes):
 
 
 # if __name__ == '__main__':
-#     writer = SummaryWriter()
+#     # writer = SummaryWriter()
 #     model = get_resnet(50, 200)
-#     input = torch.zeros([32, 3, 224, 224])
-#     writer.add_graph(model, input)
-#     writer.close()
+#     input = torch.zeros([32, 3, 448, 448])
+#     output = model(input)
+#     # writer.add_graph(model, input)
+#     # writer.close()

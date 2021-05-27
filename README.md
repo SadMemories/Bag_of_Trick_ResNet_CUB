@@ -1,4 +1,7 @@
 ### Bag of Tricks for Image Classification with Convolutional Neural Networks
+
+[论文地址](https://openaccess.thecvf.com/content_CVPR_2019/papers/He_Bag_of_Tricks_for_Image_Classification_with_Convolutional_Neural_Networks_CVPR_2019_paper.pdf)
+
 resnet50+CUB_200_2011
 
 * 1: 未使用预训练权重，使用kaiming初始化，训练450 epochs，Top1-AC: 47.64%
@@ -16,4 +19,33 @@ resnet50+CUB_200_2011
 * 13: ResNet-B+centerCrop(test), 100 epochs, ImageNet的mean和std+cosine, Top1-AC: 78.91%
 * 14: ResNet-B+centerCrop(test), 100 epochs, ImageNet的mean和std+cosine+LabelSmooth(0.1), Top1-AC: 81.43%
 * 15: ResNet-B+centerCrop(test), 100 epcohs, ImageNet的mean和std+NAG+LabelSmooth(0.1), Top1-AC: 80.69%
+* 16: ResNet-B+centerCrop(test), 100 epochs, ImageNet的mean和std+cosine+warm up(5)+LabelSmooth(0.1), Top1-AC: 81.81%
+* 17: ResNet-B+centerCrop(test), 100 epochs, ImageNet的mean和std+cosine+warm up(5)+labelSmooth(0.1)+mixup, Top1-AC: 81.34%
+* 18: ResNet-B+centerCrop(test), 175 epochs, ImageNet的mean和std+cosine+warm up(5)+labelSmooth(0.1)+mixup, Top1-AC: 82.27%
+
+### ResNet结构(预训练权重)
+
+| Model        | Top1-AC |
+| ------------ | :-----: |
+| ResNet(init) | 66.45%  |
+| ResNet-B     | 72.82%  |
+| ResNet-C     | 55.99%  |
+|              |         |
+
+
+
+### ResNet-B+tricks
+
+| model | epochs | ColorJitter | NAG  | warm up(5) | cosine | LabelSmooth(0.1) | mixup | Top1-AC |
+| :---: | :----: | :---------: | :--: | :--------: | :----: | :--------------: | :---: | :-----: |
+|   1   |  100   |      ×      |  ×   |     ×      |   ×    |        ×         |   ×   |  79.1%  |
+|   2   |  100   |      √      |  ×   |     ×      |   ×    |        ×         |   ×   | 76.91%  |
+|   3   |  100   |      ×      |  √   |     ×      |   ×    |        ×         |   ×   | 79.32%  |
+|   4   |  100   |      ×      |  √   |     √      |   ×    |        ×         |   ×   | 78.75%  |
+|   5   |  100   |      ×      |  ×   |     √      |   √    |        ×         |   ×   | 79.06%  |
+|   6   |  100   |      ×      |  √   |     ×      |   ×    |        √         |   ×   | 80.69%  |
+|   7   |  100   |      ×      |  ×   |     ×      |   √    |        √         |   ×   | 81.43%  |
+|   8   |  100   |      ×      |  ×   |     √      |   √    |        √         |   ×   | 81.81%  |
+|   9   |  175   |      ×      |  ×   |     √      |   √    |        √         |   √   | 82.27%  |
+|       |        |             |      |            |        |                  |       |         |
 

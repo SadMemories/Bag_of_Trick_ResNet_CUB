@@ -237,8 +237,17 @@ def train(args):
             imgs = imgs.to(device)
             labels = labels.to(device)
 
-            out = model(imgs)
-            loss = criterion(out, labels)
+            if args.mixup:
+                alpha = 1  # 超参数
+                lam = np.random.beta(alpha, alpha)
+                index = torch.randperm(imgs.size(0)).to(device)
+                inputs = lam * imgs + (1 - lam) * imgs[index, :]
+                labels_a, labels_b = labels, labels[index]
+                out = model(inputs)
+                loss = lam * criterion(out, labels_a) + (1 - lam) * criterion(out, labels_b)
+            else:
+                out = model(imgs)
+                loss = criterion(out, labels)
 
             train_epoch_loss += loss.item()
             predict = torch.max(out, dim=1)[1]
@@ -301,6 +310,7 @@ if __name__ == '__main__':
     parser.add_argument('--warm-up', type=int, default=0, help='warm up epoch')
     parser.add_argument('--cosine', action='store_true', help='using cosine learning rate adjust')
     parser.add_argument('--label-smooth', action='store_true', help='using label smooth loss')
+    parser.add_argument('--mixup', action='store_true', help='using mixup')
 
     args = parser.parse_args()
 
